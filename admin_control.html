@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+
+<body>
+    <!-- Skeleton Loader -->
+    <div class="skeleton-loader">
+        <div class="skeleton-header"></div>
+        <div class="skeleton-section starter"></div>
+        <div class="skeleton-section quick-nav"></div>
+    </div>
+
+    <section class="freeze hidden">
+        <div class="editor splitv">
+            <i class="fas fa-times fa-2x" style="text-align: right; cursor: pointer;"></i>
+            <div class="splitv innier-editor">
+                <img src="" alt="Product Image Preview" id="editorImage">
+                <div class="splitv" style="gap: 20px;">
+                    <input type="file" id="productImageInput" accept="image/*">
+                    <input type="text" class="text-input" id="productNameInput" placeholder="Product Name">
+                    <input type="number" class="text-input" id="productPriceInput" placeholder="Price">
+                    <select id="productTagInput" class="tag-input">
+                        <option value="">Select Tag</option>
+                        <!-- Tags will be dynamically added here -->
+                    </select>
+                </div>
+            </div>
+            <button id="deleteProductButton" class="hidden cta-button"
+                style="border: none; margin: 10px 0px;">Delete</button>
+            <button class="cta-button" style="border: none;" id="saveProductButton">Save</button>
+        </div>
+    </section>
+
+    <header>
+        <div class="logo" style="justify-content: space-between;">
+            <a href="index.html">
+                <h1 style="color: red; opacity: 1;">AVENUE</h1>
+                <h5 style="color: red; opacity: 1;">ADMIN MODE</h5>
+            </a>
+            <Button id="logout-button" onclick="logout()">LOGOUT</Button>
+        </div>
+    </header>
+
+    <main class="admin-main">
+        <section class="stats-section">
+            <!-- Daily Sales Chart -->
+            <div class="chart-container">
+                <h2>Daily Sales (From Today to One Week Ago)</h2>
+                <canvas id="dailySalesChart"></canvas>
+            </div>
+
+            <!-- Product Sales Distribution -->
+            <div class="chart-container">
+                <h2>Product Sales Distribution</h2>
+                <canvas id="productChart"></canvas>
+            </div>
+        </section>
+
+        <h2>Products</h2>
+
+        <button id="createNewProductButton" class="cta-button" style="margin-bottom: 20px; border: none;">Create New
+            Product</button>
+
+        <section class="product-editor">
+            <!-- Products will be dynamically added here -->
+        </section>
+    </main>
+
+    <script src="skel.js"></script>
+    <script src="admin.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+
+        async function fetchWithTimeout(url, options = {}, timeout = 8000) {
+            const defaultOptions = {
+                credentials: 'include',  // Ensure cookies are sent with requests
+                ...options
+            };
+            return Promise.race([
+                fetch(url, defaultOptions),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), timeout))
+            ]);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const baseApiUrl = 'http://localhost:8080';
+            let dailySalesChart, productChart;
+
+            async function fetchDataAndUpdateCharts() {
+                try {
+                    // Fetch products data with timeout
+                    const productsResponse = await fetchWithTimeout(`${baseApiUrl}/products`);
+                    const productsData = await productsResponse.json();
+
+                    // Fetch orders data with timeout
+                    const ordersResponse = await fetchWithTimeout(`${baseApiUrl}/orders`);
+                    const ordersData = await ordersResponse.json();
+
+                    // Fetch order products data with timeout
+                    const orderProductsPromises = ordersData.map(order =>
+                        fetchWithTimeout(`${baseApiUrl}/orders/${order.id}/products`)
+                            .then(response => {
+                                if (!response.ok) throw new Error(`Failed to fetch products for order ${order.id}`);
+                                return response.json();
+                            })
+                    );
+
+                    const orderProductsData = await Promise.all(orderProductsPromises);
+
+                    // Process data for charts
+                    const dailySales = processDailySales(ordersData, orderProductsData, productsData);
+                    const productSales = processProductSales(productsData, orderProductsData);
+
+                    // Update charts
+                    updateDailySalesChart(dailySales);
+                    updateProductChart(productSales);
+                } catch (error) {
+                    console.error('Error fetching data:', error);
+                }
+            }
+
+            function processDailySales(ordersData, orderProductsData, productsData) {
+                const dailySales = {};
+                const today = new Date();
+
+                // Initialize the dailySales object for the last 7 days
+                for (let i = 0; i < 7; i++) {
+                    const date = new Date(today);
+                    date.setDate(today.getDate() - i);
+                    const dateStr = date.toISOString().split('T')[0];
+                    dailySales[dateStr] = 0;
+                }
+
+                // Calculate sales for each day
+                ordersData.forEach(order => {
+                    const orderDate = new Date(order.order_date);
+                    const dateStr = orderDate.toISOString().split('T')[0];
+                    if (dailySales[dateStr] !== undefined) {
+                        const orderProducts = orderProductsData.find(orderProducts =>
+                            orderProducts.some(op => op.order_id === order.id)
+                        ) || [];
+
+                        const orderTotal = orderProducts.reduce((total, orderProduct) => {
+                            const product = productsData.find(p => p.id === orderProduct.product_id);
+                            return total + (product ? (product.price * orderProduct.quantity) : 0);
+                        }, 0);
+
+                        dailySales[dateStr] += orderTotal;
+                    }
+                });
+
+                // Sort dates and prepare data for the chart
+                const sortedDates = Array.from(Object.keys(dailySales)).sort((a, b) => new Date(a) - new Date(b));
+                return sortedDates.map(date => dailySales[date]);
+            }
+
+            function updateDailySalesChart(dailySales) {
+                if (dailySalesChart) {
+                    dailySalesChart.data.datasets[0].data = dailySales;
+                    dailySalesChart.update();
+                } else {
+                    const dailySalesCtx = document.getElementById('dailySalesChart').getContext('2d');
+                    const today = new Date();
+                    const labels = Array.from({ length: 7 }, (_, i) => {
+                        const date = new Date(today);
+                        date.setDate(today.getDate() - (6 - i));
+                        return date.toISOString().split('T')[0];
+                    });
+
+                    dailySalesChart = new Chart(dailySalesCtx, {
+                        type: 'line',
+                        data: {
+                            labels: labels.reverse(), // Ensure labels match the order of the data
+                            datasets: [{
+                                label: 'Sales (BHD)',
+                                data: dailySales.reverse(), // Reverse the data to match the labels
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            scales: {
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Date'
+                                    }
+                                },
+                                y: {
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: 'Sales (BHD)'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            function processProductSales(productsData, orderProductsData) {
+                const productSalesMap = new Map();
+
+                // Initialize map with product names and zero quantities
+                productsData.forEach(product => {
+                    productSalesMap.set(product.id, { name: product.name, quantity: 0, price: product.price });
+                });
+
+                // Aggregate quantities from order products data
+                orderProductsData.forEach(orderProducts => {
+                    orderProducts.forEach(orderProduct => {
+                        if (productSalesMap.has(orderProduct.product_id)) {
+                            const current = productSalesMap.get(orderProduct.product_id);
+                            current.quantity += orderProduct.quantity;
+                            productSalesMap.set(orderProduct.product_id, current);
+                        }
+                    });
+                });
+
+                const labels = [];
+                const quantities = [];
+                const revenues = [];
+                productSalesMap.forEach((value) => {
+                    labels.push(value.name);
+                    quantities.push(value.quantity);
+                    revenues.push(value.quantity * value.price); // Calculate revenue
+                });
+
+                return { labels, quantities, revenues };
+            }
+
+            function updateProductChart(productSales) {
+                if (productChart) {
+                    productChart.data.labels = productSales.labels;
+                    productChart.data.datasets[0].data = productSales.revenues;
+                    productChart.update();
+                } else {
+                    const productCtx = document.getElementById('productChart').getContext('2d');
+                    productChart = new Chart(productCtx, {
+                        type: 'pie',
+                        data: {
+                            labels: productSales.labels,
+                            datasets: [{
+                                label: 'Product Sales',
+                                data: productSales.revenues,
+                                backgroundColor: [
+                                    'rgba(54, 162, 235, 0.2)',
+                                    'rgba(255, 206, 86, 0.2)',
+                                    'rgba(75, 192, 192, 0.2)',
+                                    'rgba(153, 102, 255, 0.2)'
+                                ],
+                                borderColor: [
+                                    'rgba(54, 162, 235, 1)',
+                                    'rgba(255, 206, 86, 1)',
+                                    'rgba(75, 192, 192, 1)',
+                                    'rgba(153, 102, 255, 1)'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function (tooltipItem) {
+                                            const index = tooltipItem.dataIndex;
+                                            const item = productSales.labels[index];
+                                            const quantity = productSales.quantities[index];
+                                            const revenue = productSales.revenues[index];
+                                            return `${item}: ${quantity} sold, ${revenue.toFixed(2)} BHD revenue`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            // Fetch data and update charts when the DOM is loaded
+            fetchDataAndUpdateCharts();
+
+            const createNewProductButton = document.getElementById('createNewProductButton');
+            if (createNewProductButton) {
+                createNewProductButton.addEventListener('click', () => {
+                    document.getElementById('productNameInput').value = '';
+                    document.getElementById('productPriceInput').value = '';
+                    document.getElementById('productTagInput').value = '';
+                    document.getElementById('editorImage').src = '';
+                    document.getElementById('deleteProductButton').classList.add('hidden');
+                    openEditor();
+                });
+            } else {
+                console.error('Create New Product button not found');
+            }
+
+            function openEditor() {
+                document.body.style.overflow = 'hidden';
+                document.querySelector('.freeze').classList.remove('hidden');
+            }
+
+            function closeEditor() {
+                document.body.style.overflow = '';
+                document.querySelector('.freeze').classList.add('hidden');
+            }
+
+            const closeEditorButton = document.querySelector('.fa-times');
+            if (closeEditorButton) {
+                closeEditorButton.addEventListener('click', closeEditor);
+            } else {
+                console.error('Close editor button not found');
+            }
+        });
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>6AVENUE Coffee Shop</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Skeleton Loader -->
+    <div class="skeleton-loader">
+        <div class="skeleton-header"></div>
+        <div class="skeleton-section starter"></div>
+        <div class="skeleton-section quick-nav"></div>
+    </div>
+
+    <header>
+        <div class="logo">
+            <a href="index.html">
+                <h1>AVENUE</h1>
+            </a>
+            <h5>Awaken Your Senses with Every Sip</h5>
+        </div>
+        <div class="hamburger">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="menu.html">Our Menu</a></li>
+                <li><a href="coming_soon.html">Customer Reviews</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <h2>Explore Our Menu</h2>
+        <section class="filters">
+            <div class="filter-item" data-tag-id="all">
+                <img src="images/all.png" alt="All Coffees" style="aspect-ratio: inherit; width: 48px;">
+                <h3>All</h3>
+            </div>
+            <div class="filter-item" data-tag-id="2">
+                <img src="images/coffee_logo.png" alt="Hot Coffees" style="aspect-ratio: inherit; width: 48px;">
+                <h3>Hot<br>Coffees</h3>
+            </div>
+            <div class="filter-item" data-tag-id="3">
+                <img src="images/iced-coffee.png" alt="Cold Coffees" style="aspect-ratio: inherit; width: 48px;">
+                <h3>Cold<br>Coffees</h3>
+            </div>
+            <div class="filter-item" data-tag-id="4">
+                <img src="images/mojito.png" alt="Mojito" style="aspect-ratio: inherit; width: 48px;">
+                <h3>Mojitos</h3>
+            </div>
+            <div class="filter-item" data-tag-id="5">
+                <img src="images/frappuccino.png" alt="Frappe" style="aspect-ratio: inherit; width: 48px;">
+                <h3>Frappés</h3>
+            </div>
+            <div class="filter-item" data-tag-id="6">
+                <img src="images/milkshake.png" alt="Milkshake" style="aspect-ratio: inherit; width: 48px;">
+                <h3>Milkshakes</h3>
+            </div>
+            <div class="filter-item" data-tag-id="7">
+                <img src="images/cookie.png" alt="Deserts" style="aspect-ratio: inherit; width: 48px;">
+                <h3>Deserts</h3>
+            </div>
+        </section>
+        
+
+        <section class="menu-container">
+            <!-- Menu items will be dynamically inserted here -->
+        </section>
+    </main>
+    <script src="menu.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

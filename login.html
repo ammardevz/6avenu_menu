@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Skeleton Loader -->
+    <div class="skeleton-loader">
+        <div class="skeleton-header"></div>
+        <div class="skeleton-section starter"></div>
+        <div class="skeleton-section quick-nav"></div>
+    </div>
+
+    <main class="login-main">
+        <h2>
+            <div class="logo">
+                <a href="index.html">
+                    <h1>AVENUE</h1>
+                </a>
+            </div>
+        </h2>
+        <section class="login-container">
+            <h2>LOGIN</h2>
+            <form id="login-form">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="name" required>
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+                <button type="submit">Login</button>
+                <div id="login-message"></div> <!-- Div for displaying messages -->
+            </form>
+        </section>
+    </main>
+
+    <script src="login.js"></script>
+    <script src="skel.js"></script>
+</body>
+
+</html>

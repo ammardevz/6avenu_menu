@@ -1,3 +1,5 @@
+
+
 document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('load', () => {
         document.body.classList.add('loaded');
@@ -12,49 +14,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const imageInput = document.querySelector('#productImageInput');
     const editorImage = document.querySelector('#editorImage');
     const productEditor = document.querySelector('.product-editor');
-    const tagSelect = document.querySelector('#productTagInput');
+    const categorySelect = document.querySelector('#productCategoryInput');
     const saveProductButton = document.querySelector('#saveProductButton');
-    const deleteProductButton = document.querySelector('#deleteProductButton'); // New reference for delete button
+    const deleteProductButton = document.querySelector('#deleteProductButton');
+    const createNewProductButton = document.querySelector('#createNewProductButton');
 
     let currentProductId = null;
     let newImageFile = null;
-    let tags = [];
+    let categories = [];
 
-    const apiBaseUrl = 'http://localhost:8080';
+    const apiBaseUrl = 'https://coffee-api-bold-moon-8315.fly.dev';
 
-    // Utility to handle fetch with timeout
     async function fetchWithTimeout(url, options = {}, timeout = 8000) {
-        // Set default options including credentials
         const defaultOptions = {
-            credentials: 'include', // Include cookies in requests
+            credentials: 'include',
             ...options
         };
-    
+
         return Promise.race([
             fetch(url, defaultOptions),
-            new Promise((_, reject) => 
+            new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Request timed out')), timeout)
             )
         ]);
     }
+
     
-    // Open the product editor with details
+
     function openEditor(product) {
         currentProductId = product.id;
         newImageFile = null;
         nameInput.value = product.name;
         priceInput.value = product.price;
-        tagSelect.value = product.tag_id || ''; // Set tag if available
-        editorImage.src = `${apiBaseUrl}/images/${product.id}.png`; // Set image src with .png extension
+        categorySelect.value = product.category_id || '';
+        editorImage.src = `${apiBaseUrl}/images/${product.id}.png?${new Date().getTime()}`;
 
-        // Show or hide the delete button based on whether it's an existing product
         deleteProductButton.classList.toggle('hidden', !currentProductId);
 
         body.style.overflow = 'hidden';
         freezeSection.classList.remove('hidden');
     }
 
-    // Close the product editor
     function closeEditor() {
         currentProductId = null;
         newImageFile = null;
@@ -62,19 +62,11 @@ document.addEventListener('DOMContentLoaded', () => {
         body.style.overflow = '';
     }
 
-    // Fetch products from the server
     async function fetchProducts() {
         try {
             const response = await fetchWithTimeout(`${apiBaseUrl}/products`);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const data = await response.json();
-            const products = data.map(product => new Product(
-                product.id,
-                `${apiBaseUrl}/images/${product.id}.png`, // Use image URL with .png extension
-                product.name,
-                product.price,
-                product.tag_id
-            ));
+            const products = await response.json();
             refreshProducts(products);
         } catch (error) {
             console.error('Error fetching products:', error);
@@ -82,59 +74,68 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Fetch tags from the server
-    async function fetchTags() {
+    async function fetchCategories() {
         try {
-            const response = await fetchWithTimeout(`${apiBaseUrl}/tags`);
+            const response = await fetchWithTimeout(`${apiBaseUrl}/categories`);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const data = await response.json();
-            tags = data;
-            refreshTags(tags);
+            categories = await response.json();
+            refreshCategories(categories);
         } catch (error) {
-            console.error('Error fetching tags:', error);
-            alert(`Failed to fetch tags: ${error.message}`);
+            console.error('Error fetching categories:', error);
+            alert(`Failed to fetch categories: ${error.message}`);
         }
     }
 
-    // Refresh the product list in the UI
     function refreshProducts(productList) {
         productEditor.innerHTML = '';
         productList.forEach(product => {
-            product.onclick(() => openEditor(product));
-            productEditor.appendChild(product.generate());
+            const productElement = new Product(
+                product.id,
+                `${apiBaseUrl}/images/${product.id}.png?${new Date().getTime()}`,
+                product.name,
+                product.price,
+                product.category_id
+            );
+            productElement.onclick(() => openEditor(product));
+            productEditor.appendChild(productElement.generate());
         });
     }
 
-    // Refresh the tags dropdown in the UI
-    function refreshTags(tagList) {
-        tagSelect.innerHTML = '<option value="">Select Tag</option>'; // Clear previous options
-        tagList.forEach(tag => {
+    function refreshCategories(categoryList) {
+        if (!categorySelect) {
+            console.error('Error: Category select element is not available.');
+            return;
+        }
+
+        categorySelect.innerHTML = '<option value="">Select Category</option>';
+        categoryList.forEach(category => {
             const option = document.createElement('option');
-            option.value = tag.id;
-            option.textContent = tag.name;
-            tagSelect.appendChild(option);
+            option.value = category.id;
+            option.textContent = category.name;
+            categorySelect.appendChild(option);
         });
     }
 
-    // Save a product (add or update)
     async function saveProduct() {
         const product = {
             name: nameInput.value,
             price: parseFloat(priceInput.value),
-            tag_id: parseInt(tagSelect.value) || null // Allow null for no tag
+            category_id: parseInt(categorySelect.value) || null
         };
+
+        console.log('Saving product:', product);
 
         try {
             let response;
             if (currentProductId) {
-                // Update existing product
+                console.log(`Updating product with ID: ${currentProductId}`);
                 response = await fetchWithTimeout(`${apiBaseUrl}/products/${currentProductId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(product)
                 });
             } else {
-                // Create new product
+                console.log('Creating new product');
                 response = await fetchWithTimeout(`${apiBaseUrl}/products`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -142,28 +143,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+            }
             const result = await response.json();
+            console.log('Save product result:', result);
 
             if (newImageFile) {
+                console.log('Uploading new image');
                 const formData = new FormData();
+                formData.append('id', result.id.toString());
                 formData.append('file', newImageFile);
 
-                await fetchWithTimeout(`${apiBaseUrl}/upload/${result.id}`, {
+                const uploadResponse = await fetchWithTimeout(`${apiBaseUrl}/upload`, {
                     method: 'POST',
                     body: formData
                 });
+
+                if (!uploadResponse.ok) {
+                    const uploadErrorText = await uploadResponse.text();
+                    throw new Error(`Image upload failed! status: ${uploadResponse.status}, message: ${uploadErrorText}`);
+                }
+                console.log('Image uploaded successfully');
             }
 
-            fetchProducts(); // Refresh the product list
-            closeEditor(); // Close the editor
+            await fetchProducts();
+            closeEditor();
         } catch (error) {
             console.error('Error saving product:', error);
             alert(`Failed to save product: ${error.message}`);
         }
     }
 
-    // Delete a product
     async function deleteProduct() {
         if (!currentProductId) return;
 
@@ -172,20 +184,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'DELETE'
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            fetchProducts(); // Refresh the product list
-            closeEditor(); // Close the editor
+            fetchProducts();
+            closeEditor();
         } catch (error) {
             console.error('Error deleting product:', error);
             alert(`Failed to delete product: ${error.message}`);
         }
     }
 
-    // Event listeners
     editorCloseBtn.addEventListener('click', closeEditor);
     saveProductButton.addEventListener('click', saveProduct);
-    deleteProductButton.addEventListener('click', deleteProduct); // Add event listener for delete button
+    deleteProductButton.addEventListener('click', deleteProduct);
+    createNewProductButton.addEventListener('click', () => {
+        currentProductId = null;
+        nameInput.value = '';
+        priceInput.value = '';
+        categorySelect.value = '';
+        editorImage.src = '';
+        newImageFile = null;
+        deleteProductButton.classList.add('hidden');
+        body.style.overflow = 'hidden';
+        freezeSection.classList.remove('hidden');
+    });
 
-    // Handle image file change
     imageInput.addEventListener('change', (event) => {
         const file = event.target.files[0];
         if (file) {
@@ -198,19 +219,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Initial load
     fetchProducts();
-    fetchTags();
+    fetchCategories();
 });
 
-// Product class definition
 class Product {
-    constructor(id, image, name, price, tag_id) {
+    constructor(id, image, name, price, category_id) {
         this.id = id;
         this.image = image;
         this.name = name;
         this.price = price;
-        this.tag_id = tag_id;
+        this.category_id = category_id;
         this.clickHandler = null;
     }
 
@@ -229,6 +248,7 @@ class Product {
         const img = document.createElement('img');
         img.src = this.image;
         img.alt = this.name;
+        
         img.loading = 'lazy';
 
         const nameElement = document.createElement('h3');
@@ -252,19 +272,16 @@ class Product {
     }
 }
 
-
-
 async function logout() {
     try {
-        const response = await fetch('http://localhost:8080/logout', {
-            method: 'POST', // or 'DELETE' depending on your API
-            credentials: 'include' // Include cookies in the request
+        const response = await fetch(`${apiBaseUrl}/logout`, {
+            method: 'POST',
+            credentials: 'include'
         });
 
         if (response.ok) {
             console.log('Successfully logged out');
-            // Optionally redirect the user to a login page or homepage
-            window.location.href = '/login.html'; // Redirect to login page
+            window.location.href = '/login.html';
         } else {
             console.error('Failed to log out', response.status);
             alert('Failed to log out. Please try again.');

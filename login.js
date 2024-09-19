@@ -2,6 +2,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     const form = document.getElementById('login-form');
     const loginMessage = document.getElementById('login-message');
 
+    // Define the base URL for the API
+    const apiBaseUrl = 'https://coffee-api-bold-moon-8315.fly.dev';
+
     // Extract redirect_url from the current URL if it exists
     const urlParams = new URLSearchParams(window.location.search);
     const redirectUrl = urlParams.get('red_from');
@@ -9,20 +12,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Function to check if the user is already logged in
     const checkIfLoggedIn = async () => {
         try {
-            const response = await fetch('http://localhost:8080/check-login', {
+            const response = await fetch(`${apiBaseUrl}/login`, {
                 method: 'GET',
                 credentials: 'include' // Ensure cookies are included
             });
 
             if (response.ok) {
                 const data = await response.json();
-                if (data.loggedIn) {
+                if (data.name) {
+                    // User is logged in, redirect them to the appropriate page
                     if (redirectUrl) {
                         window.location.href = `/${redirectUrl}`;
                     } else {
                         window.location.href = '/staff_nav.html';
                     }
                 }
+            } else if (response.status === 401) {
+                console.log("No user is logged in.");
+            } else {
+                console.error(`Unexpected response: ${response.status}`);
             }
         } catch (error) {
             console.error("Error checking login status:", error);
@@ -32,6 +40,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Check login status when the page loads
     await checkIfLoggedIn();
 
+    // Handle login form submission
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
 
@@ -46,7 +55,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         try {
             // Send the login request directly via fetch
-            const response = await fetch('http://localhost:8080/login', {
+            const response = await fetch(`${apiBaseUrl}/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded'
@@ -59,19 +68,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
 
             console.log('Login response status:', response.status);
-            console.log('Login response headers:', Object.fromEntries(response.headers.entries()));
-
             if (response.ok) {
                 const data = await response.json();
                 console.log('Login response data:', data);
                 loginMessage.textContent = `Logged in as ${data.name}`;
                 loginMessage.style.color = "green";
-                
+
                 // Redirect to the original page if redirectUrl is provided
                 if (redirectUrl) {
                     window.location.href = `/${redirectUrl}`;
                 } else {
-                    // Handle the case where no redirect URL is provided
+                    // Redirect to the staff page if no redirect URL is provided
                     window.location.href = '/staff_nav.html';
                 }
 
@@ -79,7 +86,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 loginMessage.textContent = "Invalid username or password.";
                 loginMessage.style.color = "red";
             } else {
-                loginMessage.textContent = `Error: Unknown error`;
+                loginMessage.textContent = "Error: Unknown error occurred.";
                 loginMessage.style.color = "red";
             }
 

@@ -14,10 +14,6 @@ document.addEventListener('DOMContentLoaded', function () {
         ]);
     }
 
-    window.addEventListener('load', function () {
-        document.body.classList.add('loaded');
-    });
-
     if (hamburger && nav && navItems.length) {
         hamburger.addEventListener('click', function () {
             hamburger.classList.toggle('active');

@@ -99,6 +99,7 @@ header li a {
     z-index: 1000;
     align-self: center;
     /* Center if wrapped */
+    margin-right: 10px;
 }
 
 .hamburger span {
@@ -340,7 +341,7 @@ main h2 {
 
     .menu-item {
         width: 100%;
-        max-width: 300px;
+        max-width: 200px;
         height: 200px;
         margin-bottom: 20px;
     }

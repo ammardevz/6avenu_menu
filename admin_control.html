@@ -11,7 +11,7 @@
 
 <body>
     <!-- Skeleton Loader -->
-    <div class="skeleton-loader">
+    <div class="skeleton-loader" id="skeletonLoader">
         <div class="skeleton-header"></div>
         <div class="skeleton-section starter"></div>
         <div class="skeleton-section quick-nav"></div>
@@ -19,16 +19,16 @@
 
     <section class="freeze hidden">
         <div class="editor splitv">
-            <i class="fas fa-times fa-2x" style="text-align: right; cursor: pointer;"></i>
+            <i class="fas fa-times fa-2x" style="text-align: right; cursor: pointer;" id="editorCloseBtn"></i>
             <div class="splitv innier-editor">
                 <img src="" alt="Product Image Preview" id="editorImage">
                 <div class="splitv" style="gap: 20px;">
                     <input type="file" id="productImageInput" accept="image/*">
                     <input type="text" class="text-input" id="productNameInput" placeholder="Product Name">
                     <input type="number" class="text-input" id="productPriceInput" placeholder="Price">
-                    <select id="productTagInput" class="tag-input">
-                        <option value="">Select Tag</option>
-                        <!-- Tags will be dynamically added here -->
+                    <select id="productCategoryInput" class="tag-input">
+                        <option value="">Select Category</option>
+                        <!-- Categories will be dynamically added here -->
                     </select>
                 </div>
             </div>
@@ -44,7 +44,7 @@
                 <h1 style="color: red; opacity: 1;">AVENUE</h1>
                 <h5 style="color: red; opacity: 1;">ADMIN MODE</h5>
             </a>
-            <Button id="logout-button" onclick="logout()">LOGOUT</Button>
+            <button id="logout-button">LOGOUT</button>
         </div>
     </header>
 
@@ -52,7 +52,7 @@
         <section class="stats-section">
             <!-- Daily Sales Chart -->
             <div class="chart-container">
-                <h2>Daily Sales (From Today to One Week Ago)</h2>
+                <h2>Daily Sales (Last 7 Days)</h2>
                 <canvas id="dailySalesChart"></canvas>
             </div>
 
@@ -73,259 +73,224 @@
         </section>
     </main>
 
-    <script src="skel.js"></script>
-    <script src="admin.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="admin.js"></script>
+    <script src="auth_check.js"></script>
     <script>
-
-        async function fetchWithTimeout(url, options = {}, timeout = 8000) {
+        // Ensure fetchWithTimeout and logout are available globally
+        function fetchWithTimeout(url, options = {}, timeout = 8000) {
             const defaultOptions = {
-                credentials: 'include',  // Ensure cookies are sent with requests
+                credentials: 'include',
                 ...options
             };
+
             return Promise.race([
                 fetch(url, defaultOptions),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), timeout))
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Request timed out')), timeout)
+                )
             ]);
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const baseApiUrl = 'http://localhost:8080';
-            let dailySalesChart, productChart;
+        async function logout() {
+            try {
+                const response = await fetch('https://coffee-api-bold-moon-8315.fly.dev/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
 
-            async function fetchDataAndUpdateCharts() {
-                try {
-                    // Fetch products data with timeout
-                    const productsResponse = await fetchWithTimeout(`${baseApiUrl}/products`);
-                    const productsData = await productsResponse.json();
-
-                    // Fetch orders data with timeout
-                    const ordersResponse = await fetchWithTimeout(`${baseApiUrl}/orders`);
-                    const ordersData = await ordersResponse.json();
-
-                    // Fetch order products data with timeout
-                    const orderProductsPromises = ordersData.map(order =>
-                        fetchWithTimeout(`${baseApiUrl}/orders/${order.id}/products`)
-                            .then(response => {
-                                if (!response.ok) throw new Error(`Failed to fetch products for order ${order.id}`);
-                                return response.json();
-                            })
-                    );
-
-                    const orderProductsData = await Promise.all(orderProductsPromises);
-
-                    // Process data for charts
-                    const dailySales = processDailySales(ordersData, orderProductsData, productsData);
-                    const productSales = processProductSales(productsData, orderProductsData);
-
-                    // Update charts
-                    updateDailySalesChart(dailySales);
-                    updateProductChart(productSales);
-                } catch (error) {
-                    console.error('Error fetching data:', error);
+                if (response.ok) {
+                    console.log('Successfully logged out');
+                    window.location.href = '/login.html'; // Redirect to login page
+                } else {
+                    console.error('Failed to log out', response.status);
+                    alert('Failed to log out. Please try again.');
                 }
+            } catch (error) {
+                console.error('Error during logout:', error);
+                alert('An error occurred while logging out. Please try again.');
             }
+        }
 
-            function processDailySales(ordersData, orderProductsData, productsData) {
-                const dailySales = {};
-                const today = new Date();
+        // Add event listener to logout button
+        document.getElementById('logout-button').addEventListener('click', logout);
 
-                // Initialize the dailySales object for the last 7 days
-                for (let i = 0; i < 7; i++) {
-                    const date = new Date(today);
-                    date.setDate(today.getDate() - i);
-                    const dateStr = date.toISOString().split('T')[0];
-                    dailySales[dateStr] = 0;
+        // Process daily sales data
+        function processDailySales(ordersData, orderProductsData, productsData) {
+            const dailySales = {};
+            const today = new Date();
+            const lastWeekDates = Array.from({ length: 7 }, (_, i) => {
+                const date = new Date(today);
+                date.setDate(today.getDate() - i);
+                return date.toISOString().split('T')[0]; // YYYY-MM-DD format
+            });
+
+            lastWeekDates.forEach(date => {
+                dailySales[date] = 0;
+            });
+
+            ordersData.forEach(order => {
+                const date = order.created_at.split('T')[0];
+                if (dailySales[date] !== undefined) {
+                    const orderProducts = orderProductsData.filter(op => op.order_id === order.id);
+                    orderProducts.forEach(op => {
+                        dailySales[date] += op.quantity * parseFloat(op.price_at_time);
+                    });
                 }
+            });
 
-                // Calculate sales for each day
-                ordersData.forEach(order => {
-                    const orderDate = new Date(order.order_date);
-                    const dateStr = orderDate.toISOString().split('T')[0];
-                    if (dailySales[dateStr] !== undefined) {
-                        const orderProducts = orderProductsData.find(orderProducts =>
-                            orderProducts.some(op => op.order_id === order.id)
-                        ) || [];
+            const labels = lastWeekDates.reverse();
+            const data = labels.map(date => dailySales[date]);
 
-                        const orderTotal = orderProducts.reduce((total, orderProduct) => {
-                            const product = productsData.find(p => p.id === orderProduct.product_id);
-                            return total + (product ? (product.price * orderProduct.quantity) : 0);
-                        }, 0);
+            return {
+                labels: labels,
+                datasets: [{
+                    label: 'Daily Sales',
+                    data: data,
+                    fill: false,
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    tension: 0.1
+                }]
+            };
+        }
 
-                        dailySales[dateStr] += orderTotal;
+        // Process product sales data for pie chart
+        function processProductSales(productsData, orderProductsData) {
+            const productSales = {};
+            const productUnitsSold = {};
+
+            productsData.forEach(product => {
+                productSales[product.name] = 0;
+                productUnitsSold[product.name] = 0;
+            });
+
+            orderProductsData.forEach(op => {
+                const product = productsData.find(p => p.id === op.product_id);
+                if (product) {
+                    productSales[product.name] += op.quantity * parseFloat(op.price_at_time);
+                    productUnitsSold[product.name] += op.quantity;
+                }
+            });
+
+            const labels = Object.keys(productSales);
+            const revenueData = Object.values(productSales);
+            const unitsData = labels.map(label => productUnitsSold[label]);
+
+            return {
+                labels: labels,
+                revenueData: revenueData,
+                unitsData: unitsData,
+                datasets: [{
+                    label: 'Product Sales',
+                    data: revenueData,
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.2)',
+                        'rgba(54, 162, 235, 0.2)',
+                        'rgba(255, 206, 86, 0.2)'
+                    ],
+                    borderColor: [
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 206, 86, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            };
+        }
+
+        function updateDailySalesChart(dailySales) {
+            const ctx = document.getElementById('dailySalesChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: dailySales,
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Revenue'
+                            },
+                            beginAtZero: true
+                        }
                     }
-                });
+                }
+            });
+        }
 
-                // Sort dates and prepare data for the chart
-                const sortedDates = Array.from(Object.keys(dailySales)).sort((a, b) => new Date(a) - new Date(b));
-                return sortedDates.map(date => dailySales[date]);
-            }
-
-            function updateDailySalesChart(dailySales) {
-                if (dailySalesChart) {
-                    dailySalesChart.data.datasets[0].data = dailySales;
-                    dailySalesChart.update();
-                } else {
-                    const dailySalesCtx = document.getElementById('dailySalesChart').getContext('2d');
-                    const today = new Date();
-                    const labels = Array.from({ length: 7 }, (_, i) => {
-                        const date = new Date(today);
-                        date.setDate(today.getDate() - (6 - i));
-                        return date.toISOString().split('T')[0];
-                    });
-
-                    dailySalesChart = new Chart(dailySalesCtx, {
-                        type: 'line',
-                        data: {
-                            labels: labels.reverse(), // Ensure labels match the order of the data
-                            datasets: [{
-                                label: 'Sales (BHD)',
-                                data: dailySales.reverse(), // Reverse the data to match the labels
-                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                                borderColor: 'rgba(75, 192, 192, 1)',
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            scales: {
-                                x: {
-                                    title: {
-                                        display: true,
-                                        text: 'Date'
-                                    }
-                                },
-                                y: {
-                                    beginAtZero: true,
-                                    title: {
-                                        display: true,
-                                        text: 'Sales (BHD)'
-                                    }
+        function updateProductChart(productSales) {
+            const ctx = document.getElementById('productChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: productSales.labels,
+                    datasets: [{
+                        label: 'Product Sales',
+                        data: productSales.revenueData,
+                        backgroundColor: productSales.datasets[0].backgroundColor,
+                        borderColor: productSales.datasets[0].borderColor,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function (tooltipItem) {
+                                    const idx = tooltipItem.dataIndex;
+                                    const units = productSales.unitsData[idx];
+                                    const revenue = productSales.revenueData[idx];
+                                    return `${tooltipItem.label}: ${units} units ($${revenue.toFixed(2)})`;
                                 }
                             }
                         }
-                    });
+                    }
                 }
-            }
+            });
+        }
 
-            function processProductSales(productsData, orderProductsData) {
-                const productSalesMap = new Map();
-
-                // Initialize map with product names and zero quantities
-                productsData.forEach(product => {
-                    productSalesMap.set(product.id, { name: product.name, quantity: 0, price: product.price });
-                });
-
-                // Aggregate quantities from order products data
-                orderProductsData.forEach(orderProducts => {
-                    orderProducts.forEach(orderProduct => {
-                        if (productSalesMap.has(orderProduct.product_id)) {
-                            const current = productSalesMap.get(orderProduct.product_id);
-                            current.quantity += orderProduct.quantity;
-                            productSalesMap.set(orderProduct.product_id, current);
-                        }
-                    });
-                });
-
-                const labels = [];
-                const quantities = [];
-                const revenues = [];
-                productSalesMap.forEach((value) => {
-                    labels.push(value.name);
-                    quantities.push(value.quantity);
-                    revenues.push(value.quantity * value.price); // Calculate revenue
-                });
-
-                return { labels, quantities, revenues };
-            }
-
-            function updateProductChart(productSales) {
-                if (productChart) {
-                    productChart.data.labels = productSales.labels;
-                    productChart.data.datasets[0].data = productSales.revenues;
-                    productChart.update();
-                } else {
-                    const productCtx = document.getElementById('productChart').getContext('2d');
-                    productChart = new Chart(productCtx, {
-                        type: 'pie',
-                        data: {
-                            labels: productSales.labels,
-                            datasets: [{
-                                label: 'Product Sales',
-                                data: productSales.revenues,
-                                backgroundColor: [
-                                    'rgba(54, 162, 235, 0.2)',
-                                    'rgba(255, 206, 86, 0.2)',
-                                    'rgba(75, 192, 192, 0.2)',
-                                    'rgba(153, 102, 255, 0.2)'
-                                ],
-                                borderColor: [
-                                    'rgba(54, 162, 235, 1)',
-                                    'rgba(255, 206, 86, 1)',
-                                    'rgba(75, 192, 192, 1)',
-                                    'rgba(153, 102, 255, 1)'
-                                ],
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                legend: {
-                                    position: 'top',
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function (tooltipItem) {
-                                            const index = tooltipItem.dataIndex;
-                                            const item = productSales.labels[index];
-                                            const quantity = productSales.quantities[index];
-                                            const revenue = productSales.revenues[index];
-                                            return `${item}: ${quantity} sold, ${revenue.toFixed(2)} BHD revenue`;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    });
+        // Fetch data and update charts on page load
+        async function fetchDataAndUpdateCharts() {
+            try {
+                const [ordersResponse, orderProductsResponse, productsResponse] = await Promise.all([
+                    fetchWithTimeout('https://coffee-api-bold-moon-8315.fly.dev/orders'),
+                    fetchWithTimeout('https://coffee-api-bold-moon-8315.fly.dev/order_products'),
+                    fetchWithTimeout('https://coffee-api-bold-moon-8315.fly.dev/products')
+                ]);
+                if (!ordersResponse.ok || !orderProductsResponse.ok || !productsResponse.ok) {
+                    throw new Error('One or more requests failed.');
                 }
-            }
+                const [ordersData, orderProductsData, productsData] = await Promise.all([
+                    ordersResponse.json(),
+                    orderProductsResponse.json(),
+                    productsResponse.json()
+                ]);
 
-            // Fetch data and update charts when the DOM is loaded
-            fetchDataAndUpdateCharts();
+                const dailySales = processDailySales(ordersData, orderProductsData, productsData);
+                updateDailySalesChart(dailySales);
 
-            const createNewProductButton = document.getElementById('createNewProductButton');
-            if (createNewProductButton) {
-                createNewProductButton.addEventListener('click', () => {
-                    document.getElementById('productNameInput').value = '';
-                    document.getElementById('productPriceInput').value = '';
-                    document.getElementById('productTagInput').value = '';
-                    document.getElementById('editorImage').src = '';
-                    document.getElementById('deleteProductButton').classList.add('hidden');
-                    openEditor();
-                });
-            } else {
-                console.error('Create New Product button not found');
-            }
+                const productSales = processProductSales(productsData, orderProductsData);
+                updateProductChart(productSales);
 
-            function openEditor() {
-                document.body.style.overflow = 'hidden';
-                document.querySelector('.freeze').classList.remove('hidden');
-            }
+                // Hide skeleton loader
+                document.getElementById('skeletonLoader').style.display = 'none';
 
-            function closeEditor() {
-                document.body.style.overflow = '';
-                document.querySelector('.freeze').classList.add('hidden');
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('skeletonLoader').style.display = 'none'; // Hide loader if error occurs
             }
+        }
 
-            const closeEditorButton = document.querySelector('.fa-times');
-            if (closeEditorButton) {
-                closeEditorButton.addEventListener('click', closeEditor);
-            } else {
-                console.error('Close editor button not found');
-            }
-        });
+        // Call fetchDataAndUpdateCharts when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', fetchDataAndUpdateCharts);
     </script>
-
 </body>
 
 </html>

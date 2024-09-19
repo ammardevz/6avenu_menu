@@ -342,7 +342,7 @@ main h2 {
     .menu-item {
         width: 100%;
         max-width: 200px;
-        height: 200px;
+        height: 250px;
         margin-bottom: 20px;
     }
 }
